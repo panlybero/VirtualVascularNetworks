@@ -25,12 +25,13 @@
 using namespace std;// Number of vertices in the graph
 #define V 50
 #define SIDE 5
-#define GEN 20000
+#define GEN 2000
 #define TESTTAR 15
 #define MUTRATE 15  // 0 means 0% chance,  100 means 100%
-#define RUNS 1
-#define NEWPOINTS true
-#define BIMODAL true
+#define RUNS 5
+
+#define NEWPOINTS true //deprecated
+#define BIMODAL false
 #define OPTFORRAD true
 #define THREEDEE false
 
@@ -110,9 +111,10 @@ void geneToTree(Gene* gene, float** graph, int NofPoints, vector<int>** tree, in
 
 	// Print the solution
 	int* parent = new int[n];
-	primMST(graphprime, parent,n);
+	primMST(graphprime, parent,n, true);
 	
-	
+	gene->dump();
+	system("pause");
 
 	//vector<int>* tree[V];
 	for (int i = 0; i < n; i++)
@@ -170,7 +172,7 @@ Gene* generateRandomRadGene(int size)
 	return g;
 }
 */
-int networkModel(int index, int v, float** graph, Point* points, FileHandler* f, string folderPath);
+double networkModel(int index, int v, float** graph, Point* points, FileHandler* f, string folderPath, bool seeded , Gene* seed );
 
 double getFitness(Gene* gene, Gene* radGene, Point* points, float** graph, int NofPoints);
 
@@ -194,7 +196,7 @@ void testmut(double* gene, int n);
 
 float pathLength(vector<int> tree, Point* points);
 
-string makeTreeString(vector<int>** tree, Point* points, int v);
+//string makeTreeString(vector<int>** tree, Point* points, int v);
 
 
 float pathLength(vector<int> path, Point* points)
@@ -509,7 +511,7 @@ void runModel(int index, int v, float** graph, Point* points, FileHandler* f)
 	radPool->at(maxi)->dump();
 	geneToTree(pool->at(maxi),graph,v,tree,v);
 	assignRadsToPoints(tree, points, v, radPool->at(maxi));
-	printTree("D:\\Generations\\Test\\final.txt", tree, points, v);
+	//printTree("D:\\Generations\\Test\\final.txt", tree, points, v);
 
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -526,7 +528,7 @@ void runModel(int index, int v, float** graph, Point* points, FileHandler* f)
 	cout << gens.at(0) << "  " << gens.back() << endl;
 }
 
-int mainModel(Point* poiints, int n, int side)
+int mainModel(Point* poiints, int n, int side, bool seeded, Gene* seed)
 {
 	int start_s = clock();
 	
@@ -581,22 +583,30 @@ int mainModel(Point* poiints, int n, int side)
 	}
 	*/
 
-	string foldername = "1011_" + to_string(side)+"_"+to_string(GEN)+"_"+mode+"_"+ to_string(clock());
-	string newFolder = "D:\\Generations\\Project22\\" +foldername;
-	string newFile = newFolder + "\\file" + to_string(0) + ".txt";
-
-	CreateDirectory(newFolder.c_str(), NULL);
-
-	FileHandler* f = new FileHandler(newFile);
 	
+
+	
+
+	//
+	
+	double* bests = new double[RUNS];
+
 	for (int i = 0; i < RUNS; i++)
 	{
 		//runModel(0, v, graph, points, f);
-		networkModel(i, v, graph, points, f, newFolder);//runModel(i, v, graph, points, f);
+		string foldername = to_string(side) + "_" + to_string(GEN) + "_" + mode + "_" + to_string(clock());
+		string newFolder = "D:\\Generations\\Project22\\" + foldername;
+		string newFile = newFolder + "\\file" + to_string(0) + ".txt";
+		FileHandler* f = new FileHandler(newFile);
+		bests[i] = networkModel(i, v, graph, points, f, newFolder,seeded, seed);//runModel(i, v, graph, points, f);
 		points =  getDavidPoints(side, nearestRadius, v);
 	}
 	
-
+	for (int i = 0; i < RUNS; i++)
+	{
+		cout << bests[i] << endl;
+	}
+	
 	////////////////////////////////////////////
 	
 
@@ -609,6 +619,8 @@ int mainModel(Point* poiints, int n, int side)
 
 
 	//cout << "leaks = " << getLeaky() << endl;
+	
+
 	int stop_s = clock();
 	cout << "time: " << ((stop_s - start_s) / double(CLOCKS_PER_SEC) * 1000)/1000 <<" sec" << endl;
 
@@ -673,27 +685,45 @@ vector<Network*>* stopRadiationEvent(vector<Network*>* pool)
 	return pool;
 }
 
-int networkModel(int index, int v, float** graph, Point* points, FileHandler* f, string folderPath)
+double networkModel(int index, int v, float** graph, Point* points, FileHandler* f, string folderPath, bool seeded = false, Gene* seed = nullptr)
 {
 
 	int geneLength = v*(v - 1) / 2;
 	int rGeneLength = v - 1;
 	int radiation_counter = 0;
 	bool radiation_flag = false;
-	
+	double final_fit = 0;
 	vector<Network*>* pool = new vector<Network*>();
 
 	//best = new Network(v);
-
-	for (int i = 0; i < population; i++)
+	if (seeded) 
 	{
-		//cout << radPool.size();
-		pool->push_back(new Network(v,points));
+		for (int i = 0; i < population; i++)
+		{
+			//cout << radPool.size();
+			pool->push_back(new Network(v, points, seeded, seed));
+			if(i>0)
+				pool->at(i)->mutate(false);
 
 
+		}
 	}
+	else
+	{
+		for (int i = 0; i < population; i++)
+		{
+			//cout << radPool.size();
+			pool->push_back(new Network(v, points));
+
+
+		}
+	}
+	string allTrees = "";
 	for (int i = 0; i < GEN; i++)
 	{
+
+		
+
 		if (radiation_flag)
 		{
 			radiation_counter++;
@@ -717,7 +747,9 @@ int networkModel(int index, int v, float** graph, Point* points, FileHandler* f,
 
 		//if (i == GEN / 2) cout << "Switching to Fitness Propotional selection" << endl;
 		pool = nextPopulation(pool, i, GEN, mode);
-
+		double max = 0;
+		int max_j = 0;
+		
 
 		if (i % 100 == 0)
 		{
@@ -741,14 +773,30 @@ int networkModel(int index, int v, float** graph, Point* points, FileHandler* f,
 			gens.push_back(max);
 			//cout<<index<<"/"<<RUNS<<" "<<i<<" / "<<GEN<< " bestfit " << max*100000.0 << " AvgFit "<<avg_fit* 100000.0 <<" Gene mutrate"<<mut<< " radGene mutrate " << mutrad <<endl;
 			cout << index << "/" << RUNS << " " << i << " / " << GEN << " bestcost " << 1 / max << " AvgcCost " << 1 / avg_fit << " Gene mutrate" << mut << " radGene mutrate " << mutrad << endl;
-			cout << pool->at(keep)->tpl << " + " << pool->at(keep)->mpl << " + " << pool->at(keep)->ztot << " + " << pool->at(keep)->cons << endl;
+			cout << pool->at(keep)->tpl << " + " << pool->at(keep)->mpl << " + " << pool->at(keep)->ztot << " + " << pool->at(keep)->cons << " + "<<pool->at(keep)->spcfl<< endl;
 
 			//pool->at(keep)->radGene->dump();
 
 			//cout << "Leaks " << getLeaky() << endl;
 		}
 
+		if (i == 1 || i == int(GEN/3) || i == int(2*GEN / 3) || i == GEN-1)
+		{
+			for (int j = 0; j < population; j++)
+			{
 
+
+				if (pool->at(j)->getFit() > max)
+				{
+					max = pool->at(j)->getFit();
+					max_j = j;
+
+				}
+			}
+			Network* best = pool->at(max_j);
+			allTrees += makeTreeString(geneToTree(best), best->points, best->getN(),best->radGene);
+			
+		}
 		/*
 		if (i < GEN - 1)
 		{
@@ -767,25 +815,52 @@ int networkModel(int index, int v, float** graph, Point* points, FileHandler* f,
 		*/
 	
 	}
-	
+	pool->at(0)->getFitness(mode);
+	string opt = pool->at(0)->optstr;
 	int max_i = 0;
 	double max_fit = 0;
+	string newFolder = folderPath + "_" + opt;
+	CreateDirectory(newFolder.c_str(), NULL);
 	for (int i = 0; i < pool->size(); i++)
 	{
-
+		
 		if (pool->at(i)->getFit() > max_fit)
 		{
 			max_fit = pool->at(i)->getFit();
 			max_i = i;
 		}
+		
+		Network* best = pool->at(i);
+		
+		vector<int>** tree = geneToTree(best);
+		double tmpfit = best->getFitness(mode);
+		
+		//best->gene->dump();
+		//best->radGene->dump();
+		printTree(folderPath+"_"+ opt+ "\\best" + to_string(i) + ".txt", tree, best, best->points, best->getN(), tmpfit);
+
 	}
+
 	Network* best = pool->at(max_i);
+
 	vector<int>** tree = geneToTree(best);
 	best->getFitness(mode);
-	best->radGene->dump();
+	opt = best->optstr;
+	final_fit = best->getFitness(mode);
+	printTree(newFolder+ "\\best" + ".txt", tree, best, best->points, best->getN(), final_fit);
+
+	FileHandler allT("D:\\Generations\\Allts\\3ts.txt");
+	allT.print(allTrees);
+	//Network* best = pool->at(max_i);
+	/*
+	vector<int>** tree = geneToTree(best);
+	best->getFitness(mode);
+	best->gene->dump();
+	//best->radGene->dump();
 	printTree(folderPath+"\\best"+to_string(index)+".txt", tree, best, best->points, best->getN());
 	//printGen(gens, 0, new FileHandler("D:\\Generations\\UpdatedModel\\gens.txt"));
 	//system("pause");
+	*/
 	cout <<"size " <<pool->size() << endl;
 	cout << "cleanup" << endl;
 	while (!pool->empty())
@@ -967,7 +1042,7 @@ int networkModel(int index, int v, float** graph, Point* points, FileHandler* f,
 	cout << gens.at(0) << "  " << gens.back() << endl;
 	*/
 
-return 0;
+return final_fit;
 }
 
 double* getProbs(vector<Gene*>* pool, vector<Gene*>* radPool,Point* points, float** graph, int NofPoints)
@@ -1589,7 +1664,7 @@ void assignRadsToPoints(vector<int>** tree, Point* points, int v, Gene* radGene)
 	
 }
 
-string makeTreeString(vector<int>** tree, Point* points, int v)
+string makeTreeString_dep(vector<int>** tree, Point* points, int v)
 {
 	string res = "";
 	res+=to_string(v)+"\r\n";
@@ -1616,7 +1691,7 @@ string makeTreeString(vector<int>** tree, Point* points, int v)
 	return res;
 }
 
-void printTree(string path,vector<int>** tree, Point* points, int v)
+void printTree(string path,vector<int>** tree, Point* points, int v, double fit)
 {
 	FileHandler f(path);
 
@@ -1649,6 +1724,7 @@ void printTree(string path,vector<int>** tree, Point* points, int v)
 			f.print(to_string(i) + "-" + to_string(tree[i]->at(j)));
 		}
 	}
+	f.print(to_string(fit));
 	///////////////////////////////////////////////////////////
 
 

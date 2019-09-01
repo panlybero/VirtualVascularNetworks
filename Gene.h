@@ -29,3 +29,4 @@ int getLeaks();
 
 Gene* generateRandomGene(int size);
 Gene* generateRandomRadGene(int size);
+Gene* generateRandomGeneBinary(int size);

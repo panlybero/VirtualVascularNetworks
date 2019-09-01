@@ -5,6 +5,9 @@
 #include<time.h>
 #include<ctime>
 
+#define USESEED false
+#define NEWPOINTS true
+
 AugmentedGenome* treeToGenome(vector<int>** tree, Point* points, int size)
 {
 	AugmentedGenome* ag = new AugmentedGenome();
@@ -53,8 +56,8 @@ AugmentedGenome* treeToGenome(vector<int>** tree, Point* points, int size)
 
 	return ag;
 }
-int population = 150;
-int generations = 50000;
+int population = 100; //wrong
+int generations = 100000;
 int rate = 20;
 double side = 5;
 std::random_device rd1{};
@@ -218,8 +221,9 @@ int main()
 {
 	int n = 0;
 
-	Point* points = getDavidPoints(side, 1.0 / sqrt(acos(-1.0)), n);
-	//Point* points = getExistingPoints("best.txt", n);
+	Point* points;
+	Gene* seed_gene;
+
 	/*
 	srand(time(NULL));
 	int start_s = clock();
@@ -238,9 +242,32 @@ int main()
 	
 	cout << endl;
 	*/
-	int start_s = clock();
+	
+	if (USESEED)
+	{
+		points = getExistingPoints("D:\\Research\\seeds\\96_mst.txt", n);
+		FileHandler f;
+		seed_gene = f.readGene("D:\\Research\\seeds\\96_mst_genes.txt");
+		mainModel(points, n, side, true, seed_gene);
+	}
+	else
+	{
+		if (NEWPOINTS)
+		{
+			points = getDavidPoints(side, 1.0 / sqrt(acos(-1.0)), n);
+		}
+		else
+			points = getExistingPoints("D:\\Generations\\Project22\\existing_net\\side_4.txt", n);
 
-	mainModel(points, n, side);
+		mainModel(points, n, side);
+	}
+	
+	int start_s = clock();
+	
+	
+	
+	system("pause");
+	
 	
 
 	int stop_s = clock();

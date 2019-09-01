@@ -4,17 +4,21 @@
 
 #define THREEDEE false
 int leaky = 0;
-float heartSize = 100;
+
+
+
+int heartSize = 10;
+string allTrees = "";
 
 float myclamp(float v, float hi, float lo)
 {
 	return (v < lo) ? lo : (v > hi) ? hi : v;
 }
 
-Network::Network(int nOfPoints, Point* pnts)
+Network::Network(int nOfPoints, Point* pnts, bool seeded , Gene* seed )
 {
 	points = new Point[nOfPoints];
-	
+	optstr = "____";
 	for (int i = 0; i < nOfPoints; i++)
 	{
 		points[i] = Point(pnts[i]);
@@ -22,12 +26,25 @@ Network::Network(int nOfPoints, Point* pnts)
 
 	n = nOfPoints;
 	geneLength = nOfPoints*(nOfPoints - 1) / 2;
-	gene = generateRandomGene(geneLength);
+
+	if (!seeded)
+	{
+		gene = generateRandomGeneBinary(geneLength);
+	}
+	else
+	{
+		gene = new Gene(geneLength);
+		copyGene(gene, seed);
+	}
+
+
 	radGeneLength = n - 1;
 	radGene = generateRandomRadGene(radGeneLength);
 	
-	gene->setMutrate(0.15);// myclamp(geneLength*0.001, 0.5, 0.1));
-	radGene->setMutrate(0.15);//myclamp(radGeneLength*0.001, 0.5, 0.1));
+	double rate = 0.20;
+
+	gene->setMutrate(rate);// myclamp(geneLength*0.001, 0.5, 0.1));
+	radGene->setMutrate(rate);//myclamp(radGeneLength*0.001, 0.5, 0.1));
 
 
 
@@ -36,6 +53,7 @@ Network::Network(int nOfPoints, Point* pnts)
 	mpl = 0;
 	ztot = 0;
 	cons = 0;
+	spcfl = 0;
 	leaky++;
 }
 
@@ -49,6 +67,7 @@ Network::Network(Network * other) // Makes a copy (expensive...)
 	mpl = other->mpl;
 	ztot = other->ztot;
 	cons = other->cons;
+	spcfl = other->spcfl;
 
 
 
@@ -77,20 +96,17 @@ Network::~Network()
 	leaky--;
 }
 
-void Network::mutate()
+void Network::mutate(bool sure = false)
 {
-	if (randomDouble(0, 1) < gene->getMutrate())
+
+	if (randomDouble(0, 1) < gene->getMutrate() || sure)
 	{
 		
 		int mutpos = randomInt(0, geneLength-1);
-		gene->setPos(randomDouble(0, heartSize), mutpos);
-		//int mutperc = randomInt(1, 200);
-		//double newval = max(gene->getPos(mutpos)*mutperc / 100, 1.0f);
-		//gene->setPos(newval,mutpos);
-		//double newmut = 1.0 / double(randomInt(1, 10));
-		//gene->setMutrate(0.15);//newmut);//randomDouble(0, 1));
+		gene->setPos(1-gene->getPos(mutpos), mutpos); // BINARY MUTATION
+
 	}
-	if (randomDouble(0, 1) < radGene->getMutrate())
+	if (randomDouble(0, 1) < radGene->getMutrate() || sure )
 	{
 
 		int mutpos = randomInt(0, radGeneLength-1);
@@ -102,11 +118,7 @@ void Network::mutate()
 		//radGene->dump();
 		//system("pause");
 
-		//double newval = min(max((radGene->getPos(mutpos)*mutperc / 100), 1.0f),heartSize);
-		//radGene->setPos(newval, mutpos);
 
-		//double newmut = 1.0 / double(randomInt(1, 10));
-		//radGene->setMutrate(0.15);//newmut);//randomDouble(0, 1));
 	}
 	if (randomDouble(0, 1) > 1.9)
 	{
@@ -122,14 +134,36 @@ void Network::restrictedMutate()
 {
 	vector<int>** tree = geneToTree(this);
 	
-
-	if (randomDouble(0, 1) < gene->getMutrate())
+	if (randomDouble(0, 1) < 0.15)
 	{
 
 		int mutpos = randomInt(0, geneLength - 1);
-		gene->setPos(randomDouble(0, heartSize), mutpos);
+		while (gene->getPos(mutpos) == 0)
+		{
+			mutpos = randomInt(0, geneLength - 1);
+		}
+
+		int prev0 = randomInt(1, this->getN());
+
+		for (int i = 0; i < geneLength; i++)
+		{
+			if (gene->getPos(i) == 0)
+			{
+				prev0--;
+				if (prev0 == 0)
+				{
+					gene->setPos(1, i);
+				}
+			}
+		}
+
+		gene->setPos(1 - gene->getPos(mutpos), mutpos);
 
 	}
+
+
+
+
 	if (randomDouble(0, 1) < radGene->getMutrate())
 	{
 
@@ -172,41 +206,37 @@ double Network::getFitness(string mode) // Calculates and saves fitness in fit a
 {
 
 	double costScale = 0.001;
-	double C1 =  0.1;
-	double C2 = 0;
-	double C3 =  1;
-	double C4 =  0.1;//1;
+	double C1 =  1;
+	double C2 = 9;
+	double C3 =  0;
+	double C4 =  0;
+	double C5 = 0;//1;
 	vector<int>** tree = geneToTree(this);
 	
-	//enforceAreaConservation(tree, this, getN());
+	optstr = to_string(int(C1)) + "_" + to_string(int(C2)) + "_" + to_string(int(C3)) + "_" + to_string(int(C4)) + "_" + to_string(int(C5)) + "_";
+
 	
-	double totalpathlength = 0;// totalPathLength(tree, points, getN());
-	double meanpathlength = 0;// meanPathLength(tree, points, getN());
-	double totalimpedence = 0;// getNetworkImpedence(tree, this, getN());
-	double conservation = 0;// getAreaPreservation(tree, this, getN());
-	//cout << C1*totalpathlength/(C3*totalimpedence) << endl;
-	//system("pause");
-	
+	double totalpathlength = 0;
+	double meanpathlength = 0;
+	double totalimpedence = 0;
+	double conservation = 0;
+	double spacefilling = 0;
 
 	if (C1 != 0)  totalpathlength =  totalPathLength(tree, points, getN());
 	if (C2 != 0) meanpathlength =  meanPathLength(tree, points, getN());
 	if (C3 != 0) totalimpedence = getNetworkImpedence(tree, this, getN(), mode);
 	if (C4 != 0) conservation = getConservation(tree, this, getN(),mode);
+	if (C5 != 0) spacefilling = spaceFilling(tree, this, getN());
 	 
-
-	//if(randomDouble(0,1)>0.9999) cout << C1*totalpathlength << " + " << C2*meanpathlength << " + " << C3*totalimpedence << " + " << C4* conservation << endl;
+	double cost = costScale * (C1*totalpathlength + C2*meanpathlength + C3*totalimpedence + C4* conservation + C5*spacefilling);
 	
-	double cost = costScale * (C1*totalpathlength + C2*meanpathlength + C3*totalimpedence + C4* conservation);
-	
-
-	//cout << C1*totalpathlength / (C3*totalimpedence) << endl;
-	//system("pause");
 	fit = 1/cost;
 
 	tpl = C1* totalpathlength;
 	mpl = C2*meanpathlength;
 	ztot = C3*totalimpedence;
 	cons = C4* conservation;
+	spcfl = C5*spacefilling;
 
 	for (int i = 0; i < getN(); i++)
 	{
@@ -222,7 +252,7 @@ pair<Network*, Network*> cross(Network * p1, Network * p2) //Cross and produce 2
 
 	Network* ch = new Network(p1);
 	Network* ch2 = new Network(p2);
-	double crossprob = 0.6;
+	double crossprob = 0.9;
 	int pos = 0;
 	//Gene
 	if (randomDouble(0, 1) > crossprob)
@@ -265,6 +295,7 @@ vector<int>** geneToTree(Network* network)
 	int NofPoints = network->getN();
 
 
+
 	const int geneLength = NofPoints*(NofPoints - 1) / 2;
 	//double gene[geneLength];
 
@@ -283,28 +314,42 @@ vector<int>** geneToTree(Network* network)
 		for (int j = 0; j < NofPoints; j++)
 		{
 			graphprime[i][j] = 1;
-			if (i == j) graphprime[i][j] = 0.0f;
+
 			
 		}
 
 	}
 	index = 0;
+
+
+
 	for (int i = 0; i < NofPoints; i++) // Look at "Representing trees with genetic algorithms" 
 	{
 		for (int j = i + 1; j < NofPoints; j++)
 		{
 
-			graphprime[i][j] += 1 * network->gene->getPos(index);
-			graphprime[j][i] += 1 * network->gene->getPos(index);
+			graphprime[i][j] = network->gene->getPos(index);
+			graphprime[j][i] = network->gene->getPos(index);
 			index++;
 		}
 	}
 
+	//for (int i = 0; i < NofPoints; i++) // Look at "Representing trees with genetic algorithms" 
+	//{
+	//	for (int j = 0; j < NofPoints; j++)
+	//	{
+
+	//		cout << graphprime[i][j] << " ";
+	//	}
+	//	cout << endl;
+	//}
+	//system("pause");
 	// Print the solution
 	int* parent = new int[NofPoints];
-	primMST(graphprime, parent, NofPoints);
 
 	
+	primMST(graphprime, parent, NofPoints, true);
+
 	vector<int>** tree = new vector<int>*[NofPoints];
 
 	//vector<int>* tree[V];
@@ -351,7 +396,99 @@ void printMST(int parent[], int n, float** graph)
 		printf("%d - %d    %f \n", parent[i], i, graph[i][parent[i]]);
 }
 
-void primMST(float** graph, int* parent, int n)
+void primMST_old(float** graph, int* parent, int n)
+{
+	/*
+	for (int i = 0; i < n; i++)
+	{
+		for (int j = 0; j < n; j++)
+		{
+			if (i == j) {
+				cout << "_";
+			}
+			else {
+				cout << graph[i][j];
+			}
+		}
+		cout << endl;
+	}
+	*/
+	bool* mstSet = new bool[n];
+	for (int i = 0; i < n; i++) 
+	{
+		mstSet[i] = false;
+	}
+
+	parent[0] = -1;
+	int v = 0;
+	mstSet[0] = true;
+	int count = 0;
+	vector<pair<int,int>> zeros,ones;
+	while (count < n)
+	{
+		for (int i = 0; i < n; i++)
+		{
+			if (mstSet[i] == false)
+			{
+				if (graph[v][i] == 0)
+				{
+					zeros.push_back(make_pair(v, i));
+					graph[i][v] = 2;
+					//cout << "0 pushed " << v << "," << i << endl;
+				}
+				if (graph[v][i] == 1)
+				{
+					ones.push_back(make_pair(v, i));
+					graph[i][v] = 2;
+					//cout << "1 pushed " << v << "," << i << endl;
+				}
+			}
+		}
+		pair<int, int> e;
+		bool flag = false;
+		if (!zeros.empty())
+		{
+			do 
+			{
+				e = zeros.back();
+				zeros.pop_back();
+
+			} while (mstSet[e.second] == true && !zeros.empty());
+
+			flag = mstSet[e.second];
+			
+		}
+		
+		if(!ones.empty() && flag)
+		{
+			do
+			{
+				e = ones.back();
+				ones.pop_back();
+
+			} while (mstSet[e.second] == true && !ones.empty());
+		}
+
+
+		//cout << e.first << "," << e.second << endl;
+		mstSet[e.second] = true;
+		parent[e.second] = v;
+		v = e.second;
+		count++;
+	}
+	//cout << "HERE" << endl;
+
+	/*
+
+	for (int i = 0; i < n; i++) 
+	{
+		cout << parent[i] << endl;
+	}
+	system("pause");
+	*/
+}
+
+void primMST(float** graph, int* parent, int n, bool bin)
 {
 	//int parent[V]; // Array to store constructed MST
 	int* key = new int[n];   // Key values used to pick minimum weight edge in cut
@@ -383,7 +520,7 @@ void primMST(float** graph, int* parent, int n)
 			// graph[u][v] is non zero only for adjacent vertices of m
 			// mstSet[v] is false for vertices not yet included in MST
 			// Update the key only if graph[u][v] is smaller than key[v]
-			bool a = graph[u][v];
+			bool a = graph[u][v] >= 0;//|| bin;
 			bool b = mstSet[v] == false;
 			bool c = graph[u][v] < key[v];
 
@@ -394,6 +531,16 @@ void primMST(float** graph, int* parent, int n)
 
 	// print the constructed MST
 	//printMST(parent, V, graph);
+	/*
+	for (int i = 0; i <n ; i++)
+	{
+		for (int j = 0; j < n; j++)
+		{
+			cout << graph[i][j] << " ";
+		}
+		cout << endl;
+	}
+	*/
 
 	delete[] key;
 	delete[] mstSet;
@@ -420,11 +567,11 @@ double* getNetworkProbs(vector<Network*>* pool, string mode)
 
 	}
 	double meanFit = sum / pool->size();
-	//cout << sum << endl;
+
 	double var = 0;
 	for (int i = 0; i < pool->size(); i++)
 	{
-		//cout << (fitness[i] - meanFit)*(fitness[i] - meanFit) << endl;
+
 		var += (fitness[i] - meanFit)*(fitness[i] - meanFit);
 		
 	}
@@ -434,7 +581,7 @@ double* getNetworkProbs(vector<Network*>* pool, string mode)
 	for (int i = 0; i < pool->size(); i++)
 	{
 		probs[i] = (fitness[i]/sum); 
-		//cout << (probs[i]) << endl;
+
 
 	}
 
@@ -492,7 +639,7 @@ vector<Network*>* nextPopulation(vector<Network*>* pool, int generation, int tot
 	vector<Network*>* newpool = new vector<Network*>();
 
 
-	string selectmode = (generation > totalgens/2) ? "tournament" : "fitprop"; // first half tournament, then fitprop
+	string selectmode = (generation > totalgens/2) ? "tournament" : "tournament"; // first half tournament, then fitprop
 	
 
 	for (int i = 0; i < divd.size(); i++)
@@ -540,7 +687,7 @@ vector<Network*>* nextPopulation(vector<Network*>* pool, int generation, int tot
 	delete back;
 	newpool->pop_back();
 	newpool->push_back(elite);
-
+	//allTrees += makeTreeString(geneToTree(elite), elite->points, elite->getN(), elite->radGene);
 	while (!pool->empty())
 	{
 		Network* tmp = pool->back();
@@ -594,7 +741,6 @@ vector<Network*>* nextSubPopulation(vector<Network*>* subpool, string selectmode
 		//mutate
 		children.first->restrictedMutate();
 		children.second->restrictedMutate();
-
 		//children.first->mutate();
 		//children.second->mutate();
 		//add
@@ -679,6 +825,10 @@ pair<int, int> chooseParentsTournament(vector<Network*>* subpool, int size, stri
 	}
 	c1 = randomInt(0, size - 1);
 	c2 = randomInt(0, size - 1);
+
+	fit_c1 = subpool->at(c1)->getFitness(mode);
+	fit_c2 = subpool->at(c2)->getFitness(mode);
+
 	if (fit_c1 > fit_c2)
 	{
 		if (randomDouble(0, 1) < k)
@@ -791,63 +941,10 @@ double calcConstFlow(vector<int>** tree, Network* net, int curr, int par)
 
 		imp += 1 / temp;
 	}
-	/*
-	if (isinf(imp))
-	{
-	for (int j = 0; j < net->getN(); j++)
-	{
-	cout << j;
-	for (int l = 0; l < tree[j]->size(); l++)
-	{
-	cout << " " << tree[j]->at(l) << " ";
-	}
-	cout << endl;
-	}
-	net->radGene->dump();
-	cout << curr << endl;
-	cout << (net->radGene->getPos(curr - 1)*net->radGene->getPos(curr - 1)) << endl;
-	system("pause");
-	}
-	*/
+
 	return imp;
-	/*
-	double imp = 0;
-	double tmp = 0;
-	for (int i = 0; i < tree[curr]->size(); i++)
-	{
-		if (tree[i]->size() == 0)
-		{
-			tmp += 1 / getConstantImp(net, make_pair(curr, tree[curr]->at(i)));
-		}
-		else
-		{
-			tmp += 1 / calcConstFlow(tree, net, tree[curr]->at(i), curr);
-		}
-	}
+	
 
-
-	imp = (curr == 0) ? heartSize*heartSize : getConstantImp(net, make_pair(par,curr));
-	double temp = 0;
-	if (tree[curr]->size() == 1)
-	{
-		imp += calcConstFlow(tree, net, tree[curr]->at(0),curr); //series
-																 //imp/=
-
-	}
-	else
-	{
-		for (int i = 0; i < tree[curr]->size(); i++)
-		{
-			double k = calcPulsingFlowImp(tree, net, tree[curr]->at(i));
-
-			temp += 1 / k;
-
-		}
-
-		imp += 1 / temp;
-	}
-	return imp;
-	*/
 }
 
 double calcPulsingFlowImp(vector<int>** tree, Network* net, int curr)
@@ -970,7 +1067,42 @@ double localImpedanceMatching(vector<int>** tree, Network* network, int NofPoint
 	//if(randomDouble(0,1)>0.9999) cout << impdiff << endl;
 	return impdiff;
 }
+double spaceFilling(vector<int>** tree, Network* network, int NofPoints)
+{
+	int a = tree[0]->at(0);
+	double* dists = new double[NofPoints];
+	dists[0] = 0;
 
+	double penalty = 0;
+
+
+
+	for (int i = 0; i < NofPoints; i++)
+	{
+		for (int j = 0; j < tree[i]->size(); j++)
+		{
+			a = tree[i]->at(j);
+			dists[a] = eucDistance(network->points[i], network->points[a]);
+		}
+	}
+	for (int i = 0; i < NofPoints; i++)
+	{
+		double curr = pow(dists[i],2);
+		double sum = 0;
+		for (int j = 0; j < tree[i]->size(); j++)
+		{
+			a = tree[i]->at(j);
+			sum += pow(dists[a], 2);
+		}
+		penalty += abs(curr - sum);
+		//cout << sum << endl;
+		//system("pause");
+	}
+	delete[] dists;
+	return penalty;
+
+	
+}
 double getNetworkImpedence(vector<int>** tree, Gene* radGene, Point* points, int NofPoints)
 {
 	//Distribute rad values from gene
@@ -1007,31 +1139,8 @@ void enforceAreaConservation(vector<int>** tree, Network* network, int NofPoints
 	}
 
 
-	/*
-	for (int i = 0; i < NofPoints; i++)
-	{
-		int daughters = tree[i]->size();
-		double parentArea = (i == 0) ? pow(heartSize, 2) : pow(network->radGene->getPos(i - 1), 2);
-		double darea = 0;
-		//cout << daughters << endl;
-		if (daughters == 1)
-		{
-			network->radGene->setPos(sqrt(parentArea), tree[i]->at(0) - 1);
-			continue;
-		}
-		for (int j = 0; j < daughters - 1; j++)
-		{
-			darea+= pow(network->radGene->getPos(tree[i]->at(j) - 1), 2);
-		}
-		
-		double lastDaughterArea = parentArea - darea;
-		
-		double lastDaughterRad = (lastDaughterArea<=1)? 1:sqrt(lastDaughterArea);
-		if(daughters>1)
-		network->radGene->setPos(lastDaughterRad, tree[i]->at(daughters - 1)-1);
+	
 
-	}
-	*/
 }
 
 bool sameTree(vector<int>** tree1, vector<int>** tree2,int size)
@@ -1148,11 +1257,13 @@ int getLeaky()
 	return leaky;
 }
 
-void printTree(string path, vector<int>** tree, Network* net, Point* points, int v)
+void printTree(string path, vector<int>** tree, Network* net, Point* points, int v, double fit)
 {
 	FileHandler f(path);
 
 	f.print(to_string(v));
+
+	
 
 	if (!THREEDEE)
 		for (int i = 0; i < v; i++)
@@ -1182,7 +1293,41 @@ void printTree(string path, vector<int>** tree, Network* net, Point* points, int
 			f.print(to_string(i) + "-" + to_string(tree[i]->at(j)));
 		}
 	}
+	f.print(to_string(fit));
 	///////////////////////////////////////////////////////////
 
 
+}
+string makeTreeString(vector<int>** tree, Point* points, int v, Gene* radGene)
+{
+	Gene* tmp = radGene;
+	points[0].rad = 0;
+	for (int i = 0; i < tmp->geneLength(); i++)
+	{
+		points[i + 1].rad = tmp->getPos(i);
+	}
+
+	string res = "";
+	res+=to_string(v)+"\r\n";
+	for (int i = 0; i < v; i++)
+	{
+		res+=to_string(i) + " " + to_string(points[i].x) + " " + to_string(points[i].y) + " " + to_string(points[i].rad)+"\r\n";
+	}
+	int connections = 0;
+	for (int i = 0; i < v; i++)
+	{
+		for (int j = 0; j < tree[i]->size(); j++)
+		{
+			connections++;
+		}
+	}
+	res+=(to_string(connections))+"\r\n";
+	for (int i = 0; i < v; i++)
+	{
+		for (int j = 0; j < tree[i]->size(); j++)
+		{
+			res+=to_string(i) + "-" + to_string(tree[i]->at(j))+"\r\n";
+		}
+	}
+	return res;
 }

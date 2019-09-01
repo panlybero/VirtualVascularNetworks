@@ -1,12 +1,13 @@
 #include"FileHandler.h"
 #include<iostream>
+
 FileHandler::FileHandler(string path)
 {
 
 	m_file.open(path, std::fstream::binary | std::fstream::in | std::fstream::out | std::fstream::trunc);
 	
 
-
+	m_test = true;
 }
 
 FileHandler::FileHandler()
@@ -15,12 +16,60 @@ FileHandler::FileHandler()
 
 FileHandler::~FileHandler()
 {
-	m_file.close();
+	if(m_test)
+		m_file.close();
+
 }
 
 void FileHandler::print(string text)
 {
 	m_file << text << "\r\n";
+}
+
+Gene* FileHandler::readGene(string path)
+{
+	fstream f;
+	f.open(path);
+	char* s = new char[1000000];
+
+	f.getline(s, 150);
+	int n = stoi(s);
+
+	f.getline(s, 1000000);
+
+	//cout << s << endl;
+	vector<int> vals;
+	char * pch = NULL;
+	char* next = NULL;
+	char* pEnd;
+	char seps[] = " ,\t\n";
+
+	pch = strtok_s(s, seps, &next);
+	vals.push_back((int)strtod(pch, &pEnd));
+
+	while (pch != NULL)
+	{
+		//printf("%s\n", pch);
+		pch = strtok_s(NULL, seps, &next);
+		if (pch != NULL)
+			vals.push_back((int)strtod(pch, &pEnd));
+
+	}
+
+	for (int i = 0; i < vals.size(); i++)
+	{
+		//cout << vals[i] << endl;
+	}
+
+	f.close();
+
+	Gene* seed_gene = new Gene(n*(n-1)/2);
+	for (int i = 0; i < vals.size(); i++) {
+		seed_gene->setPos(vals[i], i);
+	}
+
+	delete[] s;
+	return seed_gene;
 }
 
 Point * FileHandler::readPoints(string path, int &size)
@@ -34,29 +83,43 @@ Point * FileHandler::readPoints(string path, int &size)
 
 	string st = s;
 
-	cout << st << endl;
-	system("pause");
 	int n = stoi(st);
 	size = n;
-
-	Point* points = new Point[size];
-
+	Point* points = new Point[n];
+	vector<double> vals;
 	for (int i = 0; i < n; i++)
 	{
 		Point p;
 		f.getline(s, 100, '\n');
+		
 		st = s;
-		string g = st.substr(2, 8);
+		char * pch = NULL;
+		char* next = NULL;
 		char* pEnd;
-		double d = strtod(g.c_str(),&pEnd);
-		p.x = d;
-		g = st.substr(11, 8);
-		d = strtod(g.c_str(), &pEnd);
-		p.y = d;
-		points[i] = p;
-	}
+		char seps[] = " ,\t\n";
+		
+		pch = strtok_s(s, seps, &next);
+		vals.push_back(strtod(pch, &pEnd));
 	
+		while (pch != NULL)
+		{
+			//printf("%s\n", pch);
+			pch = strtok_s(NULL, seps,&next);
+			if(pch!=NULL)
+				vals.push_back(strtod(pch, &pEnd));
+			
+		}
+		
+		points[i].x = vals[1];
+		points[i].y = vals[2];
+		points[i].rad = 0;
+		
+
+
+		vals.clear();
+	}
 	f.close();
+	
 	return points;
 }
 
